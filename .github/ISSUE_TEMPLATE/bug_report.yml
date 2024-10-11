@@ -22,8 +22,8 @@ body:
     id: log
     attributes:
       label: Log file
-      description: A log file will help our developers to better diagnose and fix the issue.
-      placeholder: Logs files can be found under "Logs" folder in Ryujinx program folder. They can also be accessed by opening Ryujinx, then going to File > Open Logs Folder. You can drag and drop the log on to the text area (do not copy paste).
+      description: A log file will help us to better diagnose and fix the issue.
+      placeholder: Logs files can be found under "Logs" folder in the Ryujinx program folder. They can also be accessed by opening Ryujinx, then going to File > Open Logs Folder. You can drag and drop the log on to the text area (do not copy paste).
     validations:
       required: true
   - type: input
@@ -36,8 +36,8 @@ body:
   - type: input
     id: ryujinx-version
     attributes:
-      label: Ryujinx version
-      placeholder: "e.g. 1.0.470"
+      label: Ryujinx version (revision hash)
+      placeholder: "e.g. r67111a5"
     validations:
       required: true
   - type: input

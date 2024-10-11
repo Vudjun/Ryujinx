@@ -1,5 +1,5 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
-  - name: Ryujinx Discord
-    url: https://discord.gg/N2FmfVc
-    about: This is for development related issues. For support and technical issues, please come to our Discord server.
+  - name: ryujinx-mirror (Discord)
+    url: https://discord.gg/xmHPGDfVCa
+    about: This is the home of development for the ryujinx-mirror fork, feel free to make a post in `#ryujinx-help` for general support & technical issues
