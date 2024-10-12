@@ -573,7 +573,7 @@ namespace Ryujinx.UI.App.Common
                     {
                         using HttpClient httpClient = new HttpClient();
 
-                        string ldnGameDataArrayString = await httpClient.GetStringAsync("https://ldn.ryujinx.org/api/public_games");
+                        string ldnGameDataArrayString = await httpClient.GetStringAsync("https://localhost/api/public_games");
 
                         ldnGameDataArray = JsonHelper.Deserialize(ldnGameDataArrayString, LdnDataSerializerContext.IEnumerableLdnGameData);
                     }
