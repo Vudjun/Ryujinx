@@ -1,5 +1,6 @@
 using Ryujinx.Common.Utilities;
 using Ryujinx.HLE.HOS.Services.Ldn.Types;
+using Ryujinx.HLE.HOS.Services.Ldn.UserServiceCreator.LdnRyu.Types;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,7 +13,10 @@ namespace Ryujinx.RyuLDNServer
     {
         public NetworkInfo NetworkInfo;
         public List<RyuLdnSession> Sessions = new List<RyuLdnSession>();
-        public uint firstIp;
-        public uint subnetMask;
+        public RyuLdnSession hostSession;
+        public uint nextFakeIp;
+        public uint fakeNetworkSubnetMask;
+        public string gameVersion;
+        public RyuNetworkConfig networkConfig;
     }
 }

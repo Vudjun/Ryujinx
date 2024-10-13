@@ -1,4 +1,5 @@
 using Ryujinx.Common.Logging;
+using Ryujinx.Common.Memory;
 using Ryujinx.Common.Utilities;
 using Ryujinx.HLE.HOS.Services.Ldn;
 using Ryujinx.HLE.HOS.Services.Ldn.Types;
@@ -9,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 using static Ryujinx.RyuLDNServer.RyuLdnSession;
@@ -45,33 +47,72 @@ namespace Ryujinx.RyuLDNServer
 
         internal void SendGameList(RyuLdnSession session, ScanFilter filter)
         {
-            // TODO filter it based on passphrase
-            // We should filter on StationAcceptPolicy too (but it might be better if we don't?)
+            // TODO filter on StationAcceptPolicy too? If it's set to deny all the session is probably not joinable so shouldn't be sent.
             var filterFlag = filter.Flag;
-            IEnumerable<Room> rooms = RoomList;
-            if (filterFlag.HasFlag(ScanFilterFlag.SessionId))
+            foreach (var room in RoomList)
             {
+                if (!session.PassPhrase.AsSpan().SequenceEqual(room.hostSession.PassPhrase.AsSpan()))
+                {
+                    continue;
+                }
 
-            }
-            if (filterFlag.HasFlag(ScanFilterFlag.IntentId))
-            {
+                if (filter.Flag.HasFlag(ScanFilterFlag.LocalCommunicationId))
+                {
+                    if (filter.NetworkId.IntentId.LocalCommunicationId != room.NetworkInfo.NetworkId.IntentId.LocalCommunicationId)
+                    {
+                        continue;
+                    }
+                }
 
-            }
-            foreach (var room in rooms)
-            {
-                session.SendAsync(session.Protocol.Encode(PacketId.ScanReply, room.NetworkInfo));
+                if (filter.Flag.HasFlag(ScanFilterFlag.SessionId))
+                {
+                    if (!filter.NetworkId.SessionId.AsSpan().SequenceEqual(room.NetworkInfo.NetworkId.SessionId.AsSpan())) {
+                        continue;
+                    }
+                }
+
+                if (filter.Flag.HasFlag(ScanFilterFlag.NetworkType))
+                {
+                    if (filter.NetworkType != (NetworkType)room.NetworkInfo.Common.NetworkType)
+                    {
+                        continue;
+                    }
+                }
+
+                if (filter.Flag.HasFlag(ScanFilterFlag.Ssid))
+                {
+                    Span<byte> gameSsid = room.NetworkInfo.Common.Ssid.Name.AsSpan()[room.NetworkInfo.Common.Ssid.Length..];
+                    Span<byte> scanSsid = filter.Ssid.Name.AsSpan()[filter.Ssid.Length..];
+                    if (!gameSsid.SequenceEqual(scanSsid))
+                    {
+                        continue;
+                    }
+                }
+
+                if (filter.Flag.HasFlag(ScanFilterFlag.SceneId))
+                {
+                    if (filter.NetworkId.IntentId.SceneId != room.NetworkInfo.NetworkId.IntentId.SceneId)
+                    {
+                        continue;
+                    }
+                }
+
+                if (room.hostSession.UserName[0] != 0)
+                {
+                    session.SendAsync(session.Protocol.Encode(PacketId.ScanReply, room.NetworkInfo));
+                }
+                else
+                {
+                    Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "LdnManager Scan: Got empty Username. There might be a timing issue somewhere...");
+                }
             }
             Task.Delay(250).Wait(); // Reduces scan frequency a little by delaying the end packet
             session.SendAsync(session.Protocol.Encode(PacketId.ScanReplyEnd));
         }
 
-        internal void SendProxyConfig(RyuLdnSession session)
+        internal Room CreateRoom(RyuLdnSession session, NetworkInfo networkInfo, RyuNetworkConfig ryuNetworkConfig)
         {
-            session.SendAsync(session.Protocol.Encode(PacketId.ProxyConfig, session.ProxyConfig));
-        }
-
-        internal Room CreateRoom(NetworkInfo networkInfo)
-        {
+            var gameVersion = Encoding.ASCII.GetString(ryuNetworkConfig.GameVersion.AsSpan()).TrimEnd('\0');
             _random.NextBytes(networkInfo.NetworkId.SessionId.AsSpan());
 
             networkInfo.Common.Ssid.Length = 32;
@@ -81,67 +122,153 @@ namespace Ryujinx.RyuLDNServer
             {
                 NetworkInfo = networkInfo,
                 Sessions = new List<RyuLdnSession>(),
-                firstIp = NetworkHelpers.ConvertIpv4Address("10.114.0.1"),
-                subnetMask = NetworkHelpers.ConvertIpv4Address("255.255.0.0")
+                nextFakeIp = NetworkHelpers.ConvertIpv4Address("10.114.0.1"),
+                fakeNetworkSubnetMask = NetworkHelpers.ConvertIpv4Address("255.255.0.0"),
+                gameVersion = gameVersion,
+                networkConfig = ryuNetworkConfig,
+                hostSession = session
             };
-            RoomList.Add(room);
-            Task.Delay(5000).ContinueWith((t) =>
+            bool isP2P = ryuNetworkConfig.ExternalProxyPort != 0;
+            if (isP2P)
             {
-                AddDummySession(room);
-            });
+                bool isAccessible = true;
+                // probe the port to verify externally reachable
+                try
+                {
+                    using (var client = new TcpClient())
+                    {
+                        client.ReceiveTimeout = 2000;
+                        client.SendTimeout = 2000;
+                        client.Connect(((IPEndPoint)session.Socket.RemoteEndPoint!).Address, ryuNetworkConfig.ExternalProxyPort);
+                    }
+                }
+                catch (Exception)
+                {
+                    isAccessible = false;
+                }
+                if (!isAccessible)
+                {
+                    session.SendAsync(session.Protocol.Encode(PacketId.NetworkError, new NetworkErrorMessage()
+                    {
+                        Error = NetworkError.PortUnreachable
+                    }));
+                }
+            }
+            RoomList.Add(room);
             return room;
         }
-        internal void AddSessionToRoom(Room room, RyuLdnSession session, UserConfig userConfig, ushort localCommunicationVersion)
+        internal void AddSessionToRoom(Room room, RyuLdnSession session, UserConfig userConfig)
         {
-            int nodeIndex = room.NetworkInfo.Ldn.Nodes.AsSpan().ToArray().ToList().FindIndex(x => x.IsConnected == 0); // todo :)
-            var node = room.NetworkInfo.Ldn.Nodes[nodeIndex];
-            node.MacAddress = session.InitializeData.MacAddress;
-            node.NodeId = (byte)nodeIndex;
-            node.IsConnected = 1;
-            node.UserName = userConfig.UserName;
-            node.LocalCommunicationVersion = localCommunicationVersion;
-            node.Ipv4Address = room.firstIp + (uint)nodeIndex;
-            session.ProxyConfig = new ProxyConfig()
-            {
-                ProxyIp = node.Ipv4Address,
-                ProxySubnetMask = room.subnetMask
-            };
-            room.NetworkInfo.Ldn.Nodes[nodeIndex] = node;
-            room.NetworkInfo.Ldn.NodeCount = (byte)(nodeIndex + 1);
+            session._state = SessionState.Connected;
             room.Sessions.Add(session);
             session.Room = room;
-            SendProxyConfig(session);
-            session._state = SessionState.Connected;
-            SendConnected(session);
-            SyncNetwork(room);
+            session.fakeIp = room.nextFakeIp++;
+            // If P2P is enabled
+            if (room.networkConfig.ExternalProxyPort != 0)
+            {
+                var token = new Array16<byte>();
+                _random.NextBytes(token.AsSpan());
+                bool isPrivate = session.ip.AsSpan().SequenceEqual(room.hostSession.ip.AsSpan());
+                ExternalProxyConfig config;
+                // If same network, send private IP, since same-IP connections through a uPNP opened port on the router often fails depending on router configuration
+                if (isPrivate)
+                {
+                    room.hostSession.SendAsync(room.hostSession.Protocol.Encode(PacketId.ExternalProxyToken, new ExternalProxyToken()
+                    {
+                        AddressFamily = AddressFamily.InterNetwork,
+                        Token = token,
+                        VirtualIp = session.fakeIp
+                    }));
+                    session.SendAsync(session.Protocol.Encode(PacketId.ExternalProxy, new ExternalProxyConfig()
+                    {
+                        AddressFamily = room.networkConfig.AddressFamily,
+                        ProxyIp = room.networkConfig.PrivateIp,
+                        ProxyPort = room.networkConfig.InternalProxyPort,
+                        Token = token
+                    }));
+                }
+                else
+                {
+                    room.hostSession.SendAsync(room.hostSession.Protocol.Encode(PacketId.ExternalProxyToken, new ExternalProxyToken()
+                    {
+                        AddressFamily = session.addressFamily,
+                        PhysicalIp = session.ip,
+                        Token = token,
+                        VirtualIp = session.fakeIp
+                    }));
+                    session.SendAsync(session.Protocol.Encode(PacketId.ExternalProxy, new ExternalProxyConfig()
+                    {
+                        AddressFamily = room.hostSession.addressFamily,
+                        ProxyIp = room.hostSession.ip,
+                        ProxyPort = room.networkConfig.ExternalProxyPort,
+                        Token = token
+                    }));
+                }
+            }
+            else
+            {
+                session.SendAsync(session.Protocol.Encode(PacketId.ProxyConfig, new ProxyConfig()
+                {
+                    ProxyIp = session.fakeIp,
+                    ProxySubnetMask = room.fakeNetworkSubnetMask
+                }));
+            }
+            SyncNetwork(room, session);
         }
 
-        internal void AddDummySession(Room room)
+        internal void SyncNetwork(Room room, RyuLdnSession? connectedSession = null)
         {
-            int nodeIndex = room.NetworkInfo.Ldn.Nodes.AsSpan().ToArray().ToList().FindIndex(x => x.IsConnected == 0); // todo :)
-            var node = room.NetworkInfo.Ldn.Nodes[nodeIndex];
-            _random.NextBytes(node.MacAddress.AsSpan());
-            node.NodeId = (byte)nodeIndex;
-            node.IsConnected = 1;
-            Encoding.UTF8.GetBytes("Dummy\0").CopyTo(node.UserName.AsSpan());
-            node.LocalCommunicationVersion = 13;
-            node.Ipv4Address = room.firstIp + (uint)nodeIndex;
-            room.NetworkInfo.Ldn.Nodes[nodeIndex] = node;
-            room.NetworkInfo.Ldn.NodeCount = (byte)(nodeIndex + 1);
-            SyncNetwork(room);
-        }
-
-        internal void SyncNetwork(Room room)
-        {
+            for (var i = 0; i < 8; i++)
+            {
+                var session = room.Sessions.ElementAtOrDefault(i);
+                if (session == null)
+                {
+                    room.NetworkInfo.Ldn.Nodes[i] = new NodeInfo();
+                }
+                else
+                {
+                    room.NetworkInfo.Ldn.Nodes[i] = new NodeInfo()
+                    {
+                        MacAddress = session.InitializeData.MacAddress,
+                        NodeId = (byte)i,
+                        IsConnected = 1,
+                        UserName = session.UserName,
+                        LocalCommunicationVersion = (ushort)session.LocalCommunicationVersion,
+                        Ipv4Address = session.fakeIp
+                    };
+                }
+            }
+            room.NetworkInfo.Ldn.NodeCount = (byte)room.Sessions.Count;
             foreach (var session in room.Sessions)
             {
-                session.SendAsync(session.Protocol.Encode(PacketId.SyncNetwork, room.NetworkInfo));
+                if (session == connectedSession)
+                {
+                    session.SendAsync(session.Protocol.Encode(PacketId.Connected, room.NetworkInfo));
+                }
+                else
+                {
+                    session.SendAsync(session.Protocol.Encode(PacketId.SyncNetwork, room.NetworkInfo));
+                }
             }
         }
 
-        internal void SendConnected(RyuLdnSession ryuLdnSession)
+        internal void CloseRoom(Room room)
         {
-            ryuLdnSession.SendAsync(ryuLdnSession.Protocol.Encode(PacketId.Connected, ryuLdnSession.Room.NetworkInfo));
+            foreach (var session in room.Sessions)
+            {
+                session.SendAsync(session.Protocol.Encode(PacketId.Disconnect, new DisconnectMessage()
+                {
+                    DisconnectIP = 0
+                }));
+                session.Disconnect();
+            }
+            RoomList.Remove(room);
+        }
+
+        internal void RemoveSessionFromRoom(Room room, RyuLdnSession ryuLdnSession)
+        {
+            room.Sessions.Remove(ryuLdnSession);
+            SyncNetwork(room);
         }
     }
 }

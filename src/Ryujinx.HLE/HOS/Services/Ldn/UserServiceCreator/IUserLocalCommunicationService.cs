@@ -25,8 +25,8 @@ namespace Ryujinx.HLE.HOS.Services.Ldn.UserServiceCreator
 {
     class IUserLocalCommunicationService : IpcService, IDisposable
     {
-        //public static string LanPlayHost = "ldn.ryujinx.org";
-        public static string LanPlayHost = "127.0.0.1";
+        public static string LanPlayHost = "ldn.ryujinx.org";
+        //public static string LanPlayHost = "LDN server goes here";
         public static short  LanPlayPort = 30456;
 
         public INetworkClient NetworkClient { get; private set; }

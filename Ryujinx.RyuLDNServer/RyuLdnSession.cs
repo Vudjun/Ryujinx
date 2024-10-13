@@ -6,14 +6,17 @@ using Ryujinx.Common.Utilities;
 using Ryujinx.HLE.HOS.Services.Ldn;
 using Ryujinx.HLE.HOS.Services.Ldn.Types;
 using Ryujinx.HLE.HOS.Services.Ldn.UserServiceCreator.LdnRyu;
+using Ryujinx.HLE.HOS.Services.Ldn.UserServiceCreator.LdnRyu.Proxy;
 using Ryujinx.HLE.HOS.Services.Ldn.UserServiceCreator.LdnRyu.Types;
 using Ryujinx.HLE.HOS.Services.Ldn.UserServiceCreator.Types;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Ryujinx.RyuLDNServer
 {
@@ -28,7 +31,9 @@ namespace Ryujinx.RyuLDNServer
         {
             Uninitialized,
             Initialized,
+            Creating,
             Connected,
+            Disconnected
         }
 
         private RyuLDNServer _server;
@@ -39,7 +44,13 @@ namespace Ryujinx.RyuLDNServer
         internal InitializeMessage InitializeData = new InitializeMessage();
         public RyuLdnProtocol Protocol { get; }
         public Array128<byte> PassPhrase { get; private set; } = new Array128<byte>();
-        public ProxyConfig ProxyConfig;
+
+        public Array16<byte> ip;
+        public AddressFamily addressFamily;
+        public Array33<byte> UserName;
+        public string userNameString;
+        public uint LocalCommunicationVersion;
+        public uint fakeIp;
 
         private Random _random { get; set; } = new Random();
         public Room Room { get; internal set; }
@@ -90,6 +101,10 @@ namespace Ryujinx.RyuLDNServer
 
         private void HandleCreateAccessPoint(LdnHeader header, CreateAccessPointRequest request, byte[] advertiseData)
         {
+            UserName = request.UserConfig.UserName;
+            userNameString = Encoding.UTF8.GetString(UserName.AsSpan()).TrimEnd('\0');
+            LocalCommunicationVersion = request.NetworkConfig.LocalCommunicationVersion;
+
             Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleCreateAccessPoint");
             ap = request;
             var networkInfo = new NetworkInfo()
@@ -107,7 +122,7 @@ namespace Ryujinx.RyuLDNServer
                 },
                 Ldn = new LdnNetworkInfo()
                 {
-                    NodeCount = 1,
+                    NodeCount = 0,
                     NodeCountMax = LdnConst.NodeCountMax,
                     Nodes = new Array8<NodeInfo>(),
                     AdvertiseData = new Array384<byte>(),
@@ -116,8 +131,10 @@ namespace Ryujinx.RyuLDNServer
             };
             advertiseData.CopyTo(networkInfo.Ldn.AdvertiseData.AsSpan());
             networkInfo.Ldn.AdvertiseDataSize = (ushort)advertiseData.Length;
-            var room = _manager.CreateRoom(networkInfo);
-            _manager.AddSessionToRoom(room, this, request.UserConfig, request.NetworkConfig.LocalCommunicationVersion);
+            var passphrase = request.SecurityConfig.Passphrase.AsSpan();
+            var passphraseBytes = passphrase.Slice(0, request.SecurityConfig.PassphraseSize).ToArray();
+            var room = _manager.CreateRoom(this, networkInfo, request.RyuNetworkConfig);
+            _manager.AddSessionToRoom(room, this, request.UserConfig);
             ap = request;
         }
 
@@ -160,12 +177,12 @@ namespace Ryujinx.RyuLDNServer
         }
         private void HandleReject(LdnHeader header, RejectRequest request)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleReject not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleReject not implemented");
         }
 
         private void HandleRejectReply(LdnHeader header)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleRejectReply not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleRejectReply not implemented");
         }
 
         private void HandleSetAcceptPolicy(LdnHeader header, SetAcceptPolicyRequest request)
@@ -189,7 +206,10 @@ namespace Ryujinx.RyuLDNServer
             var room = _manager.RoomList.FirstOrDefault(x => x.NetworkInfo.Common.MacAddress.AsSpan().SequenceEqual(request.NetworkInfo.Common.MacAddress.AsSpan()));
             if (room != null)
             {
-                _manager.AddSessionToRoom(room, this, request.UserConfig, (ushort)request.LocalCommunicationVersion);
+                UserName = request.UserConfig.UserName;
+                userNameString = Encoding.UTF8.GetString(UserName.AsSpan()).TrimEnd('\0');
+                LocalCommunicationVersion = request.LocalCommunicationVersion;
+                _manager.AddSessionToRoom(room, this, request.UserConfig);
             }
         }
 
@@ -221,12 +241,15 @@ namespace Ryujinx.RyuLDNServer
         private void HandleProxyData(LdnHeader header, ProxyDataHeader proxyHeader, byte[] data)
         {
             Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleProxyData");
-            var otherClients = Room.Sessions.Where(x => x != this);
-            proxyHeader.Info.SourceIpV4 = ProxyConfig.ProxyIp;
+            if (_state != SessionState.Connected)
+            {
+                return;
+            }
+            proxyHeader.Info.SourceIpV4 = fakeIp;
             var destIp = proxyHeader.Info.DestIpV4;
-            // TODO hacky
             if (destIp == 175308799 || destIp == 4294967295) // 10.114.255.255 / 255.255.255.255
             {
+                var otherClients = Room.Sessions.Where(x => x != this);
                 foreach (var client in otherClients)
                 {
                     client.SendAsync(client.Protocol.Encode(PacketId.ProxyData, proxyHeader, data));
@@ -234,7 +257,7 @@ namespace Ryujinx.RyuLDNServer
             }
             else
             {
-                var recipient = Room.Sessions.FirstOrDefault(x => x.ProxyConfig.ProxyIp == destIp);
+                var recipient = Room.Sessions.FirstOrDefault(x => x.fakeIp == destIp);
                 if (recipient != null)
                 {
                     recipient.SendAsync(recipient.Protocol.Encode(PacketId.ProxyData, proxyHeader, data));
@@ -244,63 +267,100 @@ namespace Ryujinx.RyuLDNServer
 
         private void HandleProxyDisconnect(LdnHeader header, ProxyDisconnectMessage message)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleProxyDisconnect not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleProxyDisconnect not implemented");
         }
 
         private void HandlePing(LdnHeader header, PingMessage message)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandlePing not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandlePing not implemented");
         }
 
         private void HandleNetworkError(LdnHeader header, NetworkErrorMessage message)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleNetworkError not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleNetworkError not implemented");
         }
 
         private void HandleExternalProxyToken(LdnHeader header, ExternalProxyToken token)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleExternalProxyToken not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleExternalProxyToken not implemented");
         }
 
         private void HandleExternalProxyState(LdnHeader header, ExternalProxyConnectionState state)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleExternalProxyState not implemented");
+            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleExternalProxyState");
+            if (_state != SessionState.Connected)
+            {
+                Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleExternalProxyState in wrong state");
+                return;
+            }
+            if (Room.hostSession != this)
+            {
+                Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleExternalProxyState not from external proxy");
+                return;
+            }
+            if (!state.Connected)
+            {
+                var disconnectedIp = state.IpAddress;
+                var disconnectedSession = Room.Sessions.FirstOrDefault(x => x.fakeIp == disconnectedIp);
+                if (disconnectedSession != null)
+                {
+                    _manager.RemoveSessionFromRoom(Room, disconnectedSession);
+                }
+            }
+            SendAsync(Protocol.Encode(PacketId.ExternalProxyState, state));
         }
 
         private void HandleExternalProxy(LdnHeader header, ExternalProxyConfig config)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleExternalProxy not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleExternalProxy not implemented");
         }
 
         private void HandleDisconnected(LdnHeader header, DisconnectMessage message)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleDisconnected not implemented");
+            if (_state == SessionState.Disconnected)
+            {
+                return;
+            }
+            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleDisconnected");
+
+            if (Room != null)
+            {
+                if (Room.hostSession == this)
+                {
+                    _manager.CloseRoom(Room);
+                }
+                else
+                {
+                    _manager.RemoveSessionFromRoom(Room, this);
+                }
+                Room = null;
+            }
+            _state = SessionState.Disconnected;
+            Disconnect();
         }
 
         private void HandleScanReplyEnd(LdnHeader header)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleScanReplyEnd not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleScanReplyEnd not implemented");
         }
 
         private void HandleScanReply(LdnHeader header, NetworkInfo info)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleScanReply not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleScanReply not implemented");
         }
 
         private void HandleSyncNetwork(LdnHeader header, NetworkInfo info)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleSyncNetwork not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleSyncNetwork not implemented");
         }
 
         private void HandlePassphrase(LdnHeader header, PassphraseMessage message)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandlePassphrase not implemented");
             PassPhrase = message.Passphrase;
         }
 
         private void HandleInitialize(LdnHeader header, InitializeMessage message)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleInitialize not implemented");
             if (_state == SessionState.Uninitialized)
             {
                 _manager.InitializeClient(this, message);
@@ -309,18 +369,48 @@ namespace Ryujinx.RyuLDNServer
 
         private void HandleConnectPrivate(LdnHeader header, ConnectPrivateRequest request)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleConnectPrivate not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleConnectPrivate not implemented");
         }
 
         private void HandleConnected(LdnHeader header, NetworkInfo info)
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "HandleConnected not implemented");
+            Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "HandleConnected not implemented");
         }
 
         protected override void OnDisconnected()
         {
-            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "Client has disconnected not implemented");
-            //_server.ClientDisconnected(this);
+            Logger.Info?.PrintMsg(LogClass.ServiceLdn, "Client has disconnected");
+            if (_state == SessionState.Disconnected)
+            {
+                return;
+            }
+            if (Room != null)
+            {
+                if (Room.hostSession == this)
+                {
+                    _manager.CloseRoom(Room);
+                }
+                else
+                {
+                    _manager.RemoveSessionFromRoom(Room, this);
+                }
+                Room = null;
+            }
+            _state = SessionState.Disconnected;
+        }
+
+        protected override void OnConnected()
+        {
+            var ipEndpoint = Socket.RemoteEndPoint as IPEndPoint;
+            if (ipEndpoint == null)
+            {
+                Logger.Warning?.PrintMsg(LogClass.ServiceLdn, "Client connected with invalid IP");
+                Disconnect();
+                return;
+            }
+            var addressBytes = ProxyHelpers.AddressTo16Byte(ipEndpoint.Address);
+            addressBytes.CopyTo(ip.AsSpan());
+            addressFamily = ipEndpoint.AddressFamily;
         }
 
         protected override void OnReceived(byte[] buffer, long offset, long size)
