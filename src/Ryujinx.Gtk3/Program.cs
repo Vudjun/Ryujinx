@@ -17,7 +17,6 @@ using Ryujinx.UI.Common.SystemInfo;
 using Ryujinx.UI.Widgets;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;

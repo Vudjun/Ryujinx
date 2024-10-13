@@ -1,10 +1,6 @@
 using Gtk;
-using Ryujinx.Common.Utilities;
 using Ryujinx.UI.Common.Helper;
-using System.Net.Http;
-using System.Net.NetworkInformation;
 using System.Reflection;
-using System.Threading.Tasks;
 
 namespace Ryujinx.UI.Windows
 {

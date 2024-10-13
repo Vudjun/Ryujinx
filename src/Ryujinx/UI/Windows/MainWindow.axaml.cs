@@ -19,7 +19,6 @@ using Ryujinx.HLE.HOS;
 using Ryujinx.HLE.HOS.Services.Account.Acc;
 using Ryujinx.Input.HLE;
 using Ryujinx.Input.SDL2;
-using Ryujinx.Modules;
 using Ryujinx.UI.App.Common;
 using Ryujinx.UI.Common;
 using Ryujinx.UI.Common.Configuration;
@@ -638,10 +637,10 @@ namespace Ryujinx.Ava.UI.Windows
 
             _isLoading = true;
 
-            Thread applicationLibraryThread = new(() =>
+            Thread applicationLibraryThread = new(async () =>
             {
                 ApplicationLibrary.DesiredLanguage = ConfigurationState.Instance.System.Language;
-                ApplicationLibrary.LoadApplications(ConfigurationState.Instance.UI.GameDirs);
+                await ApplicationLibrary.LoadApplications(ConfigurationState.Instance.UI.GameDirs);
 
                 _isLoading = false;
             })
