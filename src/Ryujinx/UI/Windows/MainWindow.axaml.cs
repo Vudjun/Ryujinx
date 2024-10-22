@@ -19,12 +19,14 @@ using Ryujinx.HLE.HOS;
 using Ryujinx.HLE.HOS.Services.Account.Acc;
 using Ryujinx.Input.HLE;
 using Ryujinx.Input.SDL2;
+using Ryujinx.Ui.Common.App;
 using Ryujinx.UI.App.Common;
 using Ryujinx.UI.Common;
 using Ryujinx.UI.Common.Configuration;
 using Ryujinx.UI.Common.Helper;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
@@ -161,6 +163,26 @@ namespace Ryujinx.Ava.UI.Windows
                 {
                     StatusBarView.LoadProgressBar.IsVisible = false;
                 }
+            });
+        }
+
+        private void ApplicationLibrary_LdnGameDataReceived(object sender, LdnGameDataReceivedEventArgs e)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                var ldnGameDataArray = e.LdnData;
+                foreach (var application in ViewModel.Applications)
+                {
+                    if (application.ControlHolder.ByteSpan.Length > 0)
+                    {
+                        IEnumerable<LdnGameData> ldnGameData = ldnGameDataArray.Where(game => application.ControlHolder.Value.LocalCommunicationId.Items.Contains(Convert.ToUInt64(game.TitleId, 16)));
+
+                        application.PlayerCount = ldnGameData.Sum(game => game.PlayerCount);
+                        application.GameCount = ldnGameData.Count();
+                        Console.WriteLine($"PlayerCount: {application.PlayerCount}, GameCount: {application.GameCount}");
+                    }
+                }
+                ViewModel.RefreshView();
             });
         }
 
@@ -475,6 +497,7 @@ namespace Ryujinx.Ava.UI.Windows
 
             ApplicationLibrary.ApplicationCountUpdated += ApplicationLibrary_ApplicationCountUpdated;
             ApplicationLibrary.ApplicationAdded += ApplicationLibrary_ApplicationAdded;
+            ApplicationLibrary.LdnGameDataReceived += ApplicationLibrary_LdnGameDataReceived;
 
             ViewModel.RefreshFirmwareStatus();
 

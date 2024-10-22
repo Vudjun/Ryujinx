@@ -41,6 +41,7 @@ namespace Ryujinx.UI.App.Common
         public Language DesiredLanguage { get; set; }
         public event EventHandler<ApplicationAddedEventArgs> ApplicationAdded;
         public event EventHandler<ApplicationCountUpdatedEventArgs> ApplicationCountUpdated;
+        public event EventHandler<LdnGameDataReceivedEventArgs> LdnGameDataReceived;
 
         private readonly byte[] _nspIcon;
         private readonly byte[] _xciIcon;
@@ -565,22 +566,28 @@ namespace Ryujinx.UI.App.Common
                     }
                 }
 
-                IEnumerable<LdnGameData> ldnGameDataArray = Array.Empty<LdnGameData>();
 
                 if (ConfigurationState.Instance.Multiplayer.Mode == MultiplayerMode.LdnRyu)
                 {
-                    try
+                    _ = Task.Run(async () =>
                     {
-                        using HttpClient httpClient = new HttpClient();
-
-                        string ldnGameDataArrayString = await httpClient.GetStringAsync("https://ldn.ryujinx.org/api/public_games");
-
-                        ldnGameDataArray = JsonHelper.Deserialize(ldnGameDataArrayString, _ldnDataSerializerContext.IEnumerableLdnGameData);
-                    }
-                    catch
-                    {
-                        Logger.Warning?.Print(LogClass.Application, "Failed to fetch the public games JSON from the API. Player and game count in the game list will be unavailable.");
-                    }
+                        try
+                        {
+                            IEnumerable<LdnGameData> ldnGameDataArray = Array.Empty<LdnGameData>();
+                            using HttpClient httpClient = new HttpClient();
+                            string ldnGameDataArrayString = await httpClient.GetStringAsync("https://ldn.ryujinx.org/api/public_games");
+                            ldnGameDataArray = JsonHelper.Deserialize(ldnGameDataArrayString, _ldnDataSerializerContext.IEnumerableLdnGameData);
+                            var evt = new LdnGameDataReceivedEventArgs
+                            {
+                                LdnData = ldnGameDataArray
+                            };
+                            LdnGameDataReceived?.Invoke(null, evt);
+                        }
+                        catch
+                        {
+                            Logger.Warning?.Print(LogClass.Application, "Failed to fetch the public games JSON from the API. Player and game count in the game list will be unavailable.");
+                        }
+                    });
                 }
 
                 // Loops through applications list, creating a struct and then firing an event containing the struct for each application
@@ -595,14 +602,6 @@ namespace Ryujinx.UI.App.Common
                     {
                         foreach (var application in applications)
                         {
-                            if (application.ControlHolder.ByteSpan.Length > 0)
-                            {
-                                IEnumerable<LdnGameData> ldnGameData = ldnGameDataArray.Where(game => application.ControlHolder.Value.LocalCommunicationId.Items.Contains(Convert.ToUInt64(game.TitleId, 16)));
-
-                                application.PlayerCount = ldnGameData.Sum(game => game.PlayerCount);
-                                application.GameCount = ldnGameData.Count();
-                            }
-
                             OnApplicationAdded(new ApplicationAddedEventArgs
                             {
                                 AppData = application,
