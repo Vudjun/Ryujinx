@@ -847,7 +847,7 @@ namespace Ryujinx.UI.Common.Configuration
             System.IgnoreMissingServices.Value = false;
             System.UseHypervisor.Value = true;
             Multiplayer.LanInterfaceId.Value = "0";
-            Multiplayer.Mode.Value = MultiplayerMode.Disabled;
+            Multiplayer.Mode.Value = MultiplayerMode.LdnRyu;
             Multiplayer.DisableP2p.Value = false;
             Multiplayer.Username.Value = "Player";
             Multiplayer.LdnPassphrase.Value = "";
@@ -1110,7 +1110,7 @@ namespace Ryujinx.UI.Common.Configuration
 
                 // Initialize network config.
 
-                configurationFileFormat.MultiplayerMode = MultiplayerMode.Disabled;
+                configurationFileFormat.MultiplayerMode = MultiplayerMode.LdnRyu;
                 configurationFileFormat.MultiplayerLanInterfaceId = "0";
 
                 configurationFileUpdated = true;
