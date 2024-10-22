@@ -575,7 +575,7 @@ namespace Ryujinx.UI.App.Common
                         {
                             IEnumerable<LdnGameData> ldnGameDataArray = Array.Empty<LdnGameData>();
                             using HttpClient httpClient = new HttpClient();
-                            string ldnGameDataArrayString = await httpClient.GetStringAsync("https://ldn.ryujinx.org/api/public_games");
+                            string ldnGameDataArrayString = await httpClient.GetStringAsync("https://ryuldntestweb.vudjun.com/api/public_games");
                             ldnGameDataArray = JsonHelper.Deserialize(ldnGameDataArrayString, _ldnDataSerializerContext.IEnumerableLdnGameData);
                             var evt = new LdnGameDataReceivedEventArgs
                             {

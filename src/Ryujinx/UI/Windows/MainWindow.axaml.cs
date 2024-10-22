@@ -179,7 +179,6 @@ namespace Ryujinx.Ava.UI.Windows
 
                         application.PlayerCount = ldnGameData.Sum(game => game.PlayerCount);
                         application.GameCount = ldnGameData.Count();
-                        Console.WriteLine($"PlayerCount: {application.PlayerCount}, GameCount: {application.GameCount}");
                     }
                 }
                 ViewModel.RefreshView();
