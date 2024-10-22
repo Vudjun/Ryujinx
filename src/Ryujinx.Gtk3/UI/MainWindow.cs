@@ -810,10 +810,10 @@ namespace Ryujinx.UI
 
             _tableStore.Clear();
 
-            Thread applicationLibraryThread = new(async () =>
+            Thread applicationLibraryThread = new(() =>
             {
                 ApplicationLibrary.DesiredLanguage = ConfigurationState.Instance.System.Language;
-                await ApplicationLibrary.LoadApplications(ConfigurationState.Instance.UI.GameDirs);
+                ApplicationLibrary.LoadApplications(ConfigurationState.Instance.UI.GameDirs);
 
                 _updatingGameTable = false;
             })

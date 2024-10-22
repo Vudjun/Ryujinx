@@ -659,10 +659,10 @@ namespace Ryujinx.Ava.UI.Windows
 
             _isLoading = true;
 
-            Thread applicationLibraryThread = new(async () =>
+            Thread applicationLibraryThread = new(() =>
             {
                 ApplicationLibrary.DesiredLanguage = ConfigurationState.Instance.System.Language;
-                await ApplicationLibrary.LoadApplications(ConfigurationState.Instance.UI.GameDirs);
+                ApplicationLibrary.LoadApplications(ConfigurationState.Instance.UI.GameDirs);
 
                 _isLoading = false;
             })

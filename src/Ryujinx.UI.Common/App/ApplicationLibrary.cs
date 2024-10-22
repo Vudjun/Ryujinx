@@ -493,7 +493,7 @@ namespace Ryujinx.UI.App.Common
             controlFile.Get.Read(out _, 0, outProperty, ReadOption.None).ThrowIfFailure();
         }
 
-        public async Task LoadApplications(List<string> appDirs)
+        public void LoadApplications(List<string> appDirs)
         {
             int numApplicationsFound = 0;
             int numApplicationsLoaded = 0;
