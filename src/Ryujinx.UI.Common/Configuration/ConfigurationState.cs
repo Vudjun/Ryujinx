@@ -577,11 +577,6 @@ namespace Ryujinx.UI.Common.Configuration
             public ReactiveObject<bool> DisableP2p { get; private set; }
 
             /// <summary>
-            /// Default Username
-            /// </summary>
-            public ReactiveObject<string> Username { get; private set; }
-
-            /// <summary>
             /// Local network passphrase, for private networks.
             /// </summary>
             public ReactiveObject<string> LdnPassphrase { get; private set; }
@@ -593,7 +588,6 @@ namespace Ryujinx.UI.Common.Configuration
                 Mode.Event += static (_, e) => LogValueChange(e, nameof(MultiplayerMode));
                 DisableP2p = new ReactiveObject<bool>();
                 DisableP2p.Event += static (_, e) => LogValueChange(e, nameof(DisableP2p));
-                Username = new ReactiveObject<string>();
                 LdnPassphrase = new ReactiveObject<string>();
             }
         }
@@ -789,7 +783,6 @@ namespace Ryujinx.UI.Common.Configuration
                 MultiplayerLanInterfaceId = Multiplayer.LanInterfaceId,
                 MultiplayerMode = Multiplayer.Mode,
                 MultiplayerDisableP2p = Multiplayer.DisableP2p,
-                MultiplayerUsername = Multiplayer.Username,
                 MultiplayerLdnPassphrase = Multiplayer.LdnPassphrase,
             };
 
@@ -847,9 +840,8 @@ namespace Ryujinx.UI.Common.Configuration
             System.IgnoreMissingServices.Value = false;
             System.UseHypervisor.Value = true;
             Multiplayer.LanInterfaceId.Value = "0";
-            Multiplayer.Mode.Value = MultiplayerMode.LdnRyu;
+            Multiplayer.Mode.Value = MultiplayerMode.Disabled;
             Multiplayer.DisableP2p.Value = false;
-            Multiplayer.Username.Value = "Player";
             Multiplayer.LdnPassphrase.Value = "";
             UI.GuiColumns.FavColumn.Value = true;
             UI.GuiColumns.IconColumn.Value = true;
@@ -1110,7 +1102,7 @@ namespace Ryujinx.UI.Common.Configuration
 
                 // Initialize network config.
 
-                configurationFileFormat.MultiplayerMode = MultiplayerMode.LdnRyu;
+                configurationFileFormat.MultiplayerMode = MultiplayerMode.Disabled;
                 configurationFileFormat.MultiplayerLanInterfaceId = "0";
 
                 configurationFileUpdated = true;
@@ -1602,7 +1594,6 @@ namespace Ryujinx.UI.Common.Configuration
             Multiplayer.LanInterfaceId.Value = configurationFileFormat.MultiplayerLanInterfaceId;
             Multiplayer.Mode.Value = configurationFileFormat.MultiplayerMode;
             Multiplayer.DisableP2p.Value = configurationFileFormat.MultiplayerDisableP2p;
-            Multiplayer.Username.Value = configurationFileFormat.MultiplayerUsername;
             Multiplayer.LdnPassphrase.Value = configurationFileFormat.MultiplayerLdnPassphrase;
 
             if (configurationFileUpdated)

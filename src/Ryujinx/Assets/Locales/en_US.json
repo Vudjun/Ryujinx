@@ -798,7 +798,7 @@
   "MultiplayerModeLdnMitm": "ldn_mitm",
   "MultiplayerModeLdnRyu": "RyuLDN",
   "MultiplayerDisableP2P": "Disable P2P Network Hosting (may increase latency)",
-  "MultiplayerDisableP2PTooltip": "Disable P2P hosting, instead proxying through the master server instead of directly to the host.",
+  "MultiplayerDisableP2PTooltip": "Disable P2P network hosting, peers will proxy through the master server instead of connecting to you directly.",
   "LdnPassphrase": "Network Passphrase:",
   "LdnPassphraseTooltip": "You will only be able to see hosted games with the same passphrase as you.",
   "LdnPassphraseInputTooltip": "Enter a passphrase in the format Ryujinx-<8 hex chars>. You will only be able to see hosted games with the same passphrase as you.",

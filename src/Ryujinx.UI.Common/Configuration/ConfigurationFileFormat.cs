@@ -387,11 +387,6 @@ namespace Ryujinx.UI.Common.Configuration
         public bool MultiplayerDisableP2p { get; set; }
 
         /// <summary>
-        /// Default Username
-        /// </summary>
-        public string MultiplayerUsername { get; set; }
-
-        /// <summary>
         /// Local network passphrase, for private networks.
         /// </summary>
         public string MultiplayerLdnPassphrase { get; set; }

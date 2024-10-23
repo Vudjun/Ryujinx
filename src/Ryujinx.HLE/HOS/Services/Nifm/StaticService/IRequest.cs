@@ -1,7 +1,6 @@
 using Ryujinx.Common.Logging;
 using Ryujinx.HLE.HOS.Ipc;
 using Ryujinx.HLE.HOS.Kernel.Threading;
-using Ryujinx.HLE.HOS.Services.Nifm.StaticService.Types;
 using Ryujinx.Horizon.Common;
 using System;
 
@@ -44,7 +43,7 @@ namespace Ryujinx.HLE.HOS.Services.Nifm.StaticService
 
             context.ResponseData.Write((int)requestState);
 
-            Logger.Stub?.PrintStub(LogClass.ServiceNifm, $"RequestState: {requestState}");
+            Logger.Stub?.PrintStub(LogClass.ServiceNifm);
 
             return ResultCode.Success;
         }
@@ -110,9 +109,7 @@ namespace Ryujinx.HLE.HOS.Services.Nifm.StaticService
         // SetConnectionConfirmationOption(i8)
         public ResultCode SetConnectionConfirmationOption(ServiceCtx context)
         {
-            ConnectionConfirmationOption option = (ConnectionConfirmationOption)context.RequestData.ReadByte();
-
-            Logger.Stub?.PrintStub(LogClass.ServiceNifm, $"ConnectionConfirmationOption: {option}");
+            Logger.Stub?.PrintStub(LogClass.ServiceNifm);
 
             return ResultCode.Success;
         }

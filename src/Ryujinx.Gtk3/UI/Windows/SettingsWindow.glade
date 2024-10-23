@@ -3017,7 +3017,7 @@
                                         <property name="visible">True</property>
                                         <property name="can-focus">False</property>
                                         <property name="tooltip-text" translatable="yes">Change Multiplayer Mode</property>
-                                        <property name="active-id">LdnRyu</property>
+                                        <property name="active-id">Disabled</property>
                                         <items>
                                           <item id="Disabled" translatable="yes">Disabled</item>
                                           <item id="LdnRyu" translatable="yes">Ryujinx Ldn</item>
@@ -3036,7 +3036,7 @@
                                         <property name="visible">True</property>
                                         <property name="can-focus">True</property>
                                         <property name="receives-default">False</property>
-                                        <property name="tooltip-text" translatable="yes">Disable P2P networking, instead proxying through the master server instead of directly to the host.</property>
+                                        <property name="tooltip-text" translatable="yes">Disable P2P network hosting, peers will proxy through the master server instead of connecting to you directly.</property>
                                         <property name="halign">start</property>
                                         <property name="margin-top">5</property>
                                         <property name="margin-bottom">5</property>
