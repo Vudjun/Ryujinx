@@ -1,3 +1,5 @@
+using System;
+
 namespace Ryujinx.Horizon.Common
 {
     public interface IExternalEvent

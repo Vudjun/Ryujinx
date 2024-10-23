@@ -1,5 +1,6 @@
 using Silk.NET.Vulkan;
 using System;
+using System.Runtime.Serialization;
 
 namespace Ryujinx.Graphics.Vulkan
 {

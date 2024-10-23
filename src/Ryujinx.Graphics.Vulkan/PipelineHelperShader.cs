@@ -1,4 +1,5 @@
 using Silk.NET.Vulkan;
+using VkFormat = Silk.NET.Vulkan.Format;
 
 namespace Ryujinx.Graphics.Vulkan
 {

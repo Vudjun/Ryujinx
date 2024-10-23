@@ -5,6 +5,7 @@ using Ryujinx.Cpu.LightningJit.Cache;
 using Ryujinx.Cpu.LightningJit.CodeGen.Arm64;
 using Ryujinx.Cpu.LightningJit.State;
 using Ryujinx.Cpu.Signal;
+using Ryujinx.Memory;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

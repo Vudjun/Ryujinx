@@ -1,5 +1,8 @@
 using Ryujinx.Common.Memory;
+using Ryujinx.Horizon.Sdk.Arp.Detail;
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Ryujinx.Horizon.Sdk.Ns

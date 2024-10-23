@@ -1,3 +1,5 @@
+using Ryujinx.Cpu.LightningJit.CodeGen;
+
 namespace Ryujinx.Cpu.LightningJit.Arm32.Target.Arm64
 {
     static class InstEmitVfpMove

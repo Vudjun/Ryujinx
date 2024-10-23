@@ -19,6 +19,7 @@ using Ryujinx.HLE.HOS;
 using Ryujinx.HLE.HOS.Services.Account.Acc;
 using Ryujinx.Input.HLE;
 using Ryujinx.Input.SDL2;
+using Ryujinx.Modules;
 using Ryujinx.Ui.Common.App;
 using Ryujinx.UI.App.Common;
 using Ryujinx.UI.Common;
