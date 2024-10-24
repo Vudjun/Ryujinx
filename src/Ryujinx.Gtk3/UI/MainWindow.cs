@@ -26,6 +26,7 @@ using Ryujinx.Input.GTK3;
 using Ryujinx.Input.HLE;
 using Ryujinx.Input.SDL2;
 using Ryujinx.Modules;
+using Ryujinx.Ui.Common.App;
 using Ryujinx.UI.App.Common;
 using Ryujinx.UI.Applet;
 using Ryujinx.UI.Common;
@@ -41,6 +42,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -74,6 +76,8 @@ namespace Ryujinx.UI
 
         private string _lastScannedAmiiboId = "";
         private bool _lastScannedAmiiboShowAll = false;
+
+        private IEnumerable<LdnGameData> _lastLdnGameData;
 
         public readonly ApplicationLibrary ApplicationLibrary;
         public RendererWidgetBase RendererWidget;
@@ -203,6 +207,7 @@ namespace Ryujinx.UI
 
             ApplicationLibrary.ApplicationAdded += Application_Added;
             ApplicationLibrary.ApplicationCountUpdated += ApplicationCount_Updated;
+            ApplicationLibrary.LdnGameDataReceived += Application_LdnGameDataReceived;
 
             _fileMenu.StateChanged += FileMenu_StateChanged;
             _actionMenu.StateChanged += ActionMenu_StateChanged;
@@ -306,6 +311,9 @@ namespace Ryujinx.UI
             _fileExtToggle.Toggled += FileExt_Toggled;
             _fileSizeToggle.Toggled += FileSize_Toggled;
             _pathToggle.Toggled += Path_Toggled;
+            _ldnInfoToggle.Toggled += LdnInfo_Toggled;
+
+            _ = Task.Run(ApplicationLibrary.RefreshLdn);
 
             _gameTable.Model = _tableStore = new ListStore(
                 typeof(bool),
@@ -359,6 +367,12 @@ namespace Ryujinx.UI
             InputManager = new InputManager(new GTK3KeyboardDriver(this), new SDL2GamepadDriver());
         }
 
+        private void Application_LdnGameDataReceived(object sender, LdnGameDataReceivedEventArgs e)
+        {
+            _lastLdnGameData = e.LdnData;
+            UpdateGameTable();
+        }
+
         private void UpdateMultiplayerLanInterfaceId(object sender, ReactiveEventArgs<string> args)
         {
             if (_emulationContext != null)
@@ -373,6 +387,7 @@ namespace Ryujinx.UI
             {
                 _emulationContext.Configuration.MultiplayerMode = args.NewValue;
             }
+            _ = Task.Run(ApplicationLibrary.RefreshLdn);
         }
 
         private void UpdateMultiplayerDisableP2p(object sender, ReactiveEventArgs<bool> args)
@@ -469,23 +484,23 @@ namespace Ryujinx.UI
             }
             if (ConfigurationState.Instance.UI.GuiColumns.TimePlayedColumn)
             {
-                _gameTable.AppendColumn("Time Played", new CellRendererText(), "text", 5);
+                _gameTable.AppendColumn("Time Played", new CellRendererText(), "text", 6);
             }
             if (ConfigurationState.Instance.UI.GuiColumns.LastPlayedColumn)
             {
-                _gameTable.AppendColumn("Last Played", new CellRendererText(), "text", 6);
+                _gameTable.AppendColumn("Last Played", new CellRendererText(), "text", 7);
             }
             if (ConfigurationState.Instance.UI.GuiColumns.FileExtColumn)
             {
-                _gameTable.AppendColumn("File Ext", new CellRendererText(), "text", 7);
+                _gameTable.AppendColumn("File Ext", new CellRendererText(), "text", 8);
             }
             if (ConfigurationState.Instance.UI.GuiColumns.FileSizeColumn)
             {
-                _gameTable.AppendColumn("File Size", new CellRendererText(), "text", 8);
+                _gameTable.AppendColumn("File Size", new CellRendererText(), "text", 9);
             }
             if (ConfigurationState.Instance.UI.GuiColumns.PathColumn)
             {
-                _gameTable.AppendColumn("Path", new CellRendererText(), "text", 9);
+                _gameTable.AppendColumn("Path", new CellRendererText(), "text", 10);
             }
 
             foreach (TreeViewColumn column in _gameTable.Columns)
@@ -1243,6 +1258,7 @@ namespace Ryujinx.UI
         {
             Application.Invoke(delegate
             {
+                UpdateApplicationWithLdnData(args.AppData);
                 _tableStore.AppendValues(
                     args.AppData.Favorite,
                     new Gdk.Pixbuf(args.AppData.Icon, 75, 75),
@@ -1279,6 +1295,22 @@ namespace Ryujinx.UI
                     _gameTableWindow.Vadjustment.Value = 0;
                 }
             });
+        }
+
+        private void UpdateApplicationWithLdnData(ApplicationData application)
+        {
+            if (application.ControlHolder.ByteSpan.Length > 0 && _lastLdnGameData != null)
+            {
+                IEnumerable<LdnGameData> ldnGameData = _lastLdnGameData.Where(game => application.ControlHolder.Value.LocalCommunicationId.Items.Contains(Convert.ToUInt64(game.TitleId, 16)));
+
+                application.PlayerCount = ldnGameData.Sum(game => game.PlayerCount);
+                application.GameCount = ldnGameData.Count();
+            }
+            else
+            {
+                application.PlayerCount = 0;
+                application.GameCount = 0;
+            }
         }
 
         private void Update_StatusBar(object sender, StatusUpdatedEventArgs args)
@@ -1415,12 +1447,12 @@ namespace Ryujinx.UI
                 Id = ulong.Parse(((string)_tableStore.GetValue(treeIter, 2)).Split('\n')[1], NumberStyles.HexNumber),
                 Developer = (string)_tableStore.GetValue(treeIter, 3),
                 Version = (string)_tableStore.GetValue(treeIter, 4),
-                TimePlayed = ValueFormatUtils.ParseTimeSpan((string)_tableStore.GetValue(treeIter, 5)),
-                LastPlayed = ValueFormatUtils.ParseDateTime((string)_tableStore.GetValue(treeIter, 6)),
-                FileExtension = (string)_tableStore.GetValue(treeIter, 7),
-                FileSize = ValueFormatUtils.ParseFileSize((string)_tableStore.GetValue(treeIter, 8)),
-                Path = (string)_tableStore.GetValue(treeIter, 9),
-                ControlHolder = (BlitStruct<ApplicationControlProperty>)_tableStore.GetValue(treeIter, 10),
+                TimePlayed = ValueFormatUtils.ParseTimeSpan((string)_tableStore.GetValue(treeIter, 6)),
+                LastPlayed = ValueFormatUtils.ParseDateTime((string)_tableStore.GetValue(treeIter, 7)),
+                FileExtension = (string)_tableStore.GetValue(treeIter, 8),
+                FileSize = ValueFormatUtils.ParseFileSize((string)_tableStore.GetValue(treeIter, 9)),
+                Path = (string)_tableStore.GetValue(treeIter, 10),
+                ControlHolder = (BlitStruct<ApplicationControlProperty>)_tableStore.GetValue(treeIter, 11),
             };
 
             _ = new GameTableContextMenu(this, _virtualFileSystem, _accountManager, _libHacHorizonManager.RyujinxClient, application);
