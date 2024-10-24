@@ -567,29 +567,6 @@ namespace Ryujinx.UI.App.Common
                 }
 
 
-                if (ConfigurationState.Instance.Multiplayer.Mode == MultiplayerMode.LdnRyu)
-                {
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            IEnumerable<LdnGameData> ldnGameDataArray = Array.Empty<LdnGameData>();
-                            using HttpClient httpClient = new HttpClient();
-                            string ldnGameDataArrayString = await httpClient.GetStringAsync("https://ryuldntestweb.vudjun.com/api/public_games");
-                            ldnGameDataArray = JsonHelper.Deserialize(ldnGameDataArrayString, _ldnDataSerializerContext.IEnumerableLdnGameData);
-                            var evt = new LdnGameDataReceivedEventArgs
-                            {
-                                LdnData = ldnGameDataArray
-                            };
-                            LdnGameDataReceived?.Invoke(null, evt);
-                        }
-                        catch
-                        {
-                            Logger.Warning?.Print(LogClass.Application, "Failed to fetch the public games JSON from the API. Player and game count in the game list will be unavailable.");
-                        }
-                    });
-                }
-
                 // Loops through applications list, creating a struct and then firing an event containing the struct for each application
                 foreach (string applicationPath in applicationPaths)
                 {
@@ -637,6 +614,41 @@ namespace Ryujinx.UI.App.Common
             {
                 _cancellationToken.Dispose();
                 _cancellationToken = null;
+            }
+        }
+
+        public async Task RefreshLdn()
+        {
+
+            if (ConfigurationState.Instance.Multiplayer.Mode == MultiplayerMode.LdnRyu)
+            {
+                try
+                {
+                    IEnumerable<LdnGameData> ldnGameDataArray = Array.Empty<LdnGameData>();
+                    using HttpClient httpClient = new HttpClient();
+                    string ldnGameDataArrayString = await httpClient.GetStringAsync("https://ryuldntestweb.vudjun.com/api/public_games");
+                    ldnGameDataArray = JsonHelper.Deserialize(ldnGameDataArrayString, _ldnDataSerializerContext.IEnumerableLdnGameData);
+                    var evt = new LdnGameDataReceivedEventArgs
+                    {
+                        LdnData = ldnGameDataArray
+                    };
+                    LdnGameDataReceived?.Invoke(null, evt);
+                }
+                catch
+                {
+                    Logger.Warning?.Print(LogClass.Application, "Failed to fetch the public games JSON from the API. Player and game count in the game list will be unavailable.");
+                    LdnGameDataReceived?.Invoke(null, new LdnGameDataReceivedEventArgs()
+                    {
+                        LdnData = Array.Empty<LdnGameData>()
+                    });
+                }
+            }
+            else
+            {
+                LdnGameDataReceived?.Invoke(null, new LdnGameDataReceivedEventArgs()
+                {
+                    LdnData = Array.Empty<LdnGameData>()
+                });
             }
         }
 
